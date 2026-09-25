@@ -2,7 +2,7 @@
 
 ## Before You Begin
 
-Always read [CODEBASE_MAP.md](CODEBASE_MAP.md) first. It documents the end-to-end flow, key modification points, and ownership boundaries in the codebase. This will help you understand the architecture and avoid unnecessary full-repo scans.
+When a task requires locating or understanding OpenFold3 code (e.g. "where does X happen", "what owns Y"), consult [CODEBASE_MAP.md](CODEBASE_MAP.md) instead of scanning the repository. It documents the end-to-end flow, key modification points, and ownership boundaries in the codebase. Skip it for tasks that don't need that context.
 
 ## Code Changes Policy
 
