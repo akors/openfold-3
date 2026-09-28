@@ -30,3 +30,6 @@ cutlass/
 
 # mypy cache
 .mypy_cache/
+
+# project data
+/data/**
