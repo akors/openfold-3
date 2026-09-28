@@ -21,6 +21,17 @@ This ensures code changes are intentional, reviewed, and aligned with project ne
 - Concise code: as simple as possible, but no simpler
 - Follow Zen of Python principles
 
+## Commits
+
+When committing on the user's behalf, identify yourself with a commit trailer:
+
+```bash
+git commit --trailer "Co-Authored-By: <agent name> <model name> <noreply email>" ...
+```
+
+For example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. If the model name is unavailable, give the agent name alone
+(e.g. `Co-Authored-By: Copilot <noreply email>`). Use your vendor's noreply address.
+
 ## Build and Test
 
 See [docs/BUILD_TESTING.md](docs/BUILD_TESTING.md) for test conventions and environment setup using Pixi.
