@@ -169,6 +169,10 @@ openfold3-rocm7 = { no-default-feature = true, features = [
 openfold3-msa = { no-default-feature = true, features = [
     "openfold3-msa",
 ] }
+tl-interactions-analysis = { no-default-feature = true, features = [
+    "python",
+    "tl-interactions-analysis",
+] }
 
 # Maybe we should have solve-groups, but how to conciliate between e.g. cu12 and cu13?
 # N.B. at the moment all these are editable installs
@@ -436,6 +440,21 @@ awscli = "*"    # 2.32.17
 # N.B. at the time of writing, snakemake still does not support python 3.14
 # https://github.com/snakemake/snakemake/pull/3739
 snakemake = "*"  # 7.32.4
+
+
+# --- Transfer-learning interactions analysis (notebooks, plotting)
+
+[feature.tl-interactions-analysis]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+
+[feature.tl-interactions-analysis.dependencies]
+numpy = "*"
+pandas = "*"
+seaborn = "*"
+matplotlib = "*"
+jupyterlab = "*"
+ipykernel = "*"
+ipywidgets = "*"
 
 
 # --- Tasks
