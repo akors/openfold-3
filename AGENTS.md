@@ -14,6 +14,11 @@ When a task requires locating or understanding OpenFold3 code (e.g. "where does 
 
 This ensures code changes are intentional, reviewed, and aligned with project needs.
 
+## Missing Tools
+
+If a required tool (e.g. `pixi`) is not installed or not on `PATH`, ask the user to install it manually instead of
+searching for it or installing it yourself.
+
 ## Code Style
 
 - NumPy-style docstrings
