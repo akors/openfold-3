@@ -1,10 +1,12 @@
-"""Prepare the sequence part of a dataset: archive the sequences and list the proteins with PDB hits for training.
+"""Prepare the sequence part of a dataset: archive the sequences and split the proteins by their PDB hits.
 
-A protein goes into ``train.txt`` if BLAST found a hit in a PDB chain deposited on or before the cutoff date with at
-least the given sequence identity. The output directory receives:
+Only BLAST hits with at least the given sequence identity count. A protein goes into ``seqs-train.txt`` if it has a hit
+in a PDB chain deposited on or before the cutoff date. The others go into ``seqs-test.txt``, except those with a hit in a
+chain of unknown deposition date (obsolete entries missing from the PDB index), which go into neither. The output
+directory receives:
 
 - ``sequences.zip``: the input sequence directory (its contents at the archive root)
-- ``train.txt``: IDs of the proteins with such hits, one per line
+- ``seqs-train.txt``, ``seqs-test.txt``: protein IDs, one per line
 """
 
 import argparse
@@ -91,23 +93,28 @@ def main():
     print(f"Proteins in {args.sequence_dir}: {len(proteins):,}")
     print(f"Unique subjects in {args.blast_tsv}: {hsps['subject'].nunique():,}")
 
-    # Filter chains (not subjects): a subject may group identical chains deposited before and after the cutoff.
-    # Chains of obsolete entries are missing from the index, have no deposition date and fail the comparison.
+    # Date chains (not subjects): a subject may group identical chains deposited before and after the cutoff.
+    # Chains of obsolete entries are missing from the index and have no deposition date.
     log(f"Reading PDB index {args.pdb_index}")
     keys = ["query", "subject"]
-    deposit_dates = hits["accession"].str[:4].map(read_deposit_dates(args.pdb_index))
-    old_subjects = hits.loc[deposit_dates <= args.cutoff_date, keys].drop_duplicates()
-    similar_subjects = hsps.loc[hsps["pident"] >= args.min_identity, keys].drop_duplicates()
-    train = proteins & set(similar_subjects.merge(old_subjects, on=keys)["query"])
+    similar_chains = hits.merge(hsps.loc[hsps["pident"] >= args.min_identity, keys].drop_duplicates(), on=keys)
+    deposit_dates = similar_chains["accession"].str[:4].map(read_deposit_dates(args.pdb_index))
+    known = set(similar_chains.loc[deposit_dates <= args.cutoff_date, "query"])
+    train = proteins & known
+    undated = proteins & set(similar_chains.loc[deposit_dates.isna(), "query"]) - known
+    test = proteins - known - undated
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     log(f"Writing {args.output_dir / 'sequences.zip'}")
     shutil.make_archive(args.output_dir / "sequences", "zip", root_dir=args.sequence_dir)
-    log(f"Writing {args.output_dir / 'train.txt'}")
-    (args.output_dir / "train.txt").write_text("".join(f"{protein}\n" for protein in sorted(train)))
+    for name, split in [("seqs-train.txt", train), ("seqs-test.txt", test)]:
+        log(f"Writing {args.output_dir / name}")
+        (args.output_dir / name).write_text("".join(f"{protein}\n" for protein in sorted(split)))
 
-    print(f"Proteins with hits (deposited <= {args.cutoff_date:%Y-%m-%d}, pident >= {args.min_identity}): {len(train):,}")
-    print(f"Proteins filtered out (no such hits): {len(proteins - train):,}")
+    criteria = f"pident >= {args.min_identity}, deposited <= {args.cutoff_date:%Y-%m-%d}"
+    print(f"Train proteins (hits with {criteria}): {len(train):,}")
+    print(f"Test proteins (no such hits): {len(test):,}")
+    print(f"Excluded from test (hits with pident >= {args.min_identity} in chains of unknown date): {len(undated):,}")
 
 
 if __name__ == "__main__":
