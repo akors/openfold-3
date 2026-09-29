@@ -65,8 +65,7 @@ The scripts in this directory prepare the sequence part of the dataset. Data liv
 | Fetch sequences | [download_gencode_fasta.py](download_gencode_fasta.py) | Downloads one FASTA file per protein from GENCODE (release 27, matching HuRI). |
 | Search the PDB | `blastp` against NCBI `pdbaa` (see notebook) | Finds PDB chains similar to each HuRI protein. |
 | Parse BLAST output | [parse_blast_tsv.py](parse_blast_tsv.py) | Turns the tabular BLAST report into hit and HSP tables. |
-| Cluster, search the PDB | [mmseqs-prep-huri-split.sh](mmseqs-prep-huri-split.sh) | Clusters the HuRI proteins and searches them against the PDB with MMseqs2, for the [split](#train-validation-and-test-split). |
-| Split proteins | [dataset_prepseq.py](dataset_prepseq.py) | Archives the sequences and writes `seqs-train.txt` and `seqs-test.txt`. |
+| Build the protein split | [dataset_prepseq.py](dataset_prepseq.py) | From the HuRI tables: fetches the sequences (via `download_gencode_fasta.py`), clusters them and searches them against the PDB with MMseqs2, and writes `sequences.zip`, `seqs-{train,val,test}.txt` and `meta.ini` for the [split](#train-validation-and-test-split). Slow steps are cached. |
 
 Still to decide:
 

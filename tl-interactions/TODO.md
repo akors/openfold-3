@@ -8,7 +8,7 @@ See [README.md](README.md) for the plan behind these tasks.
   - [x] Map HuRI genes to proteins and fetch sequences (GENCODE v27)
   - [x] Cluster HuRI proteins and search them against the PDB with MMseqs2
   - [x] Decide the protein-level train/validation/test split (see README)
-  - [ ] Split the proteins: test from hit-free clusters, then train/validation from the pooled rest
+  - [x] Split the proteins: test from hit-free clusters, then train/validation from the pooled rest
   - [ ] Build dimers (positives and negatives)
 - [ ] **OpenFold3 setup:** inference with the default weights works and the outputs we need can be extracted
 - [ ] **Benchmarking:** OpenFold3 speed and memory on Intel + Hopper and Grace Hopper nodes
