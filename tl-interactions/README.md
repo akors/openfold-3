@@ -23,8 +23,8 @@ HuRI pairs ─► sequences + MSAs ─► OpenFold3 inference (frozen, no ground
 ```
 
 1. Take protein pairs (dimers) from the human reference interactome, together with a set of negative pairs.
-2. Predict each dimer with OpenFold3 using the older `of3-p2-155k.pt` weights. Only inference is needed, so no
-   experimental structures are required.
+2. Predict each dimer with OpenFold3 using the default `openbind-2025-06-30-174k` weights. Only inference is needed,
+   so no experimental structures are required.
 3. Cache the features the new model reads, trimmed to the inter-chain part of each pair (see [Feature cache](#feature-cache)).
 4. Train a separate small network, built from parts of the AF3 confidence module, with binary cross-entropy against the
    interaction label. The rest of OpenFold3 stays frozen.
@@ -53,7 +53,7 @@ Properties that shape the project:
 - **No true negatives.** Y2H misses many real interactions, so "not detected" does not mean "does not bind." Negatives are
   sampled from the screened search space; the sampling strategy is still open.
 - **Hub proteins.** Some proteins have many partners. A split over pairs would let a model learn "protein X binds a lot"
-  instead of learning about interfaces, so splitting is done by protein (see below).
+  instead of learning about interfaces, so the splitting strategy has to account for this.
 
 ### Data preparation
 
@@ -65,28 +65,39 @@ The scripts in this directory prepare the sequence part of the dataset. Data liv
 | Fetch sequences | [download_gencode_fasta.py](download_gencode_fasta.py) | Downloads one FASTA file per protein from GENCODE (release 27, matching HuRI). |
 | Search the PDB | `blastp` against NCBI `pdbaa` (see notebook) | Finds PDB chains similar to each HuRI protein. |
 | Parse BLAST output | [parse_blast_tsv.py](parse_blast_tsv.py) | Turns the tabular BLAST report into hit and HSP tables. |
+| Cluster, search the PDB | [mmseqs-prep-huri-split.sh](mmseqs-prep-huri-split.sh) | Clusters the HuRI proteins and searches them against the PDB with MMseqs2, for the [split](#train-validation-and-test-split). |
 | Split proteins | [dataset_prepseq.py](dataset_prepseq.py) | Archives the sequences and writes `seqs-train.txt` and `seqs-test.txt`. |
-
-**Split.** A protein goes into the **training** set if it has a PDB hit with at least 30% sequence identity that was
-deposited on or before 2021-09-30, the AF3 training cutoff. Proteins without such a hit go into the **test** set.
-Proteins whose only hits are in obsolete entries with unknown deposition dates go into neither. The test set therefore
-contains proteins that AF3 could not have learned from close structural homologs, which guards against memorization.
 
 Still to decide:
 
-- how to build pairs from the two protein sets (for example, test pairs with both proteins, or at least one, from
-  `seqs-test.txt`);
+- how to split pairs (proteins are split as described [below](#train-validation-and-test-split));
 - the negative set, which is the next decision to make (see [Open questions](#open-questions-and-risks));
 - a length cap per pair, since very large proteins are expensive to predict and to cache.
 
+### Train, validation and test split
+
+Proteins (not yet pairs) are split by sequence cluster, so no cluster spans two sets. The *validation* set is for
+model selection and gets looked at repeatedly; the *test* set is looked at once, for the final numbers.
+
+1. Search all HuRI proteins against the PDB with MMseqs2 (≥25% identity, ≥50% coverage of the PDB chain).
+2. Cluster all HuRI proteins with MMseqs2: single-step connected-component clustering at ≥30% identity and ≥80%
+   coverage of both sequences, so that no hit above these thresholds links two clusters.
+3. **Test:** a random subset of the clusters in which no member has a PDB hit.
+4. **Train and validation:** the remaining clusters, with and without PDB hits, pooled and assigned at random. Keeping
+   hit-free clusters in training means the model also learns from the kind of protein it is tested on.
+
+Assumptions:
+
+- "No PDB hit" means no hit at the thresholds of step 1. More remote structural homologs may still exist.
+- OpenBind-0 has not seen structures of the test proteins. It was trained on the PDB through June 2025; we assume its
+  distillation sets are OpenFold3's (MGnify monomers, which are metagenomic rather than human, and disordered regions
+  of PDB entries), which the test proteins are not part of.
+
 ## Model
 
-**Base model:** OpenFold3 with the `of3-p2-155k.pt` weights, frozen. We run the full model in inference mode: trunk
-(MSA module and Pairformer), diffusion sampling, and the confidence module.
-
-These older weights are chosen so that the train/test split can be drawn along a known PDB training cutoff, which is a
-naive but cheap way to get a first read on generalization. It is not a commitment: the choice gets revisited once
-Tier 1 shows something, and until then we install an older OpenFold3 release if that is what it takes to load them.
+**Base model:** OpenFold3 with the default `openbind-2025-06-30-174k` weights (`of3-ob-2025-06-30-174k.pt`), frozen.
+We run the full model in inference mode: trunk (MSA module and Pairformer), diffusion sampling, and the confidence
+module.
 
 **New head:** a separate small network built from parts of the AF3 confidence module (AF3 SI §4.3, Algorithm 31). It
 scores inter-chain token pairs and pools them into one binding probability per chain pair.
@@ -178,7 +189,6 @@ At 10,000 pairs, even the trimmed caches reach about 1 TB. The rules we follow:
 - AUROC, together with **AUPRC at a realistic prior**. True interactions are rare among all human protein pairs, and a
   classifier that looks excellent on a balanced test set can have very low precision at realistic prevalence. We report
   AUPRC next to its chance baseline (the prevalence).
-- Results stratified by whether a pair has a known structure in the PDB before the AF3 training cutoff.
 
 ## Benchmarking
 
@@ -198,20 +208,13 @@ own numbers.
   we build from it is noisy by construction. That makes the sampling strategy and the positive-to-negative ratio
   decisions about what the model is able to learn, not just bookkeeping. Negatives drawn at random are separable by
   protein degree and abundance alone, so a high AUROC could reflect "protein X has many partners" rather than anything
-  about interfaces; the protein-level split limits this but does not remove it. Park & Marcotte (2012) is the
+  about interfaces; a protein-level split would limit this but not remove it. Park & Marcotte (2012) is the
   reference for evaluating pair-input predictions under exactly this failure mode.
 - **A PDB-derived control set.** A second dataset built from PDB complexes, with positives taken from chains that are
   in contact and artificial negatives from chain pairs that are not. Its positives have experimental structures and
   its negatives are cleaner than anything HuRI can offer, which makes it a positive control: if the head cannot
   separate that set, the HuRI numbers say nothing. Open: how to sample the negatives, and whether it serves as a
   control only or as a training set in its own right.
-- **Checkpoint compatibility.** `of3-p2-155k.pt` is a deprecated checkpoint, so it needs an older OpenFold3. The
-  registry (`openfold3/entry_points/parameters.py`) pins it to `>=0.4,<0.4.4dev0`; the parameters reference table says
-  `>=0.4,<0.5`, and the registry is the constraint that is actually enforced. We still need to confirm whether loading
-  it by path works in v0.5 or whether we install an older release. The hook target and output keys above were checked
-  against v0.5 and must be re-checked in whichever version we use.
-- **Training cutoff.** The dataset split assumes the weights were trained on PDB data up to 2021-09-30. To confirm for
-  `of3-p2-155k.pt`.
 - **Missing information.** Interactions that depend on disorder, short linear motifs, post-translational modifications,
   or a third partner may leave little signal in the structure model's representations.
 - **Paired MSAs** for heterodimers matter for prediction quality and dominate compute.
