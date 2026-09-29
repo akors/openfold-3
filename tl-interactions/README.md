@@ -57,15 +57,28 @@ Properties that shape the project:
 
 ### Data preparation
 
-The scripts in this directory prepare the sequence part of the dataset. Data lives in `../data/`.
+The dataset is built in steps, each by a script in this directory. Data lives in `../data/`, and each dataset in its
+own directory under `../data/datasets/`. [huri-exploration.ipynb](huri-exploration.ipynb) explores the HuRI tables
+the first step starts from.
 
-| Step | Where | What it does |
-|---|---|---|
-| Explore HuRI, map genes to proteins | [huri-exploration.ipynb](huri-exploration.ipynb) | Joins HuRI with its supplementary gene and transcript tables and writes the list of Ensembl protein IDs. |
-| Fetch sequences | [download_gencode_fasta.py](download_gencode_fasta.py) | Downloads one FASTA file per protein from GENCODE (release 27, matching HuRI). |
-| Search the PDB | `blastp` against NCBI `pdbaa` (see notebook) | Finds PDB chains similar to each HuRI protein. |
-| Parse BLAST output | [parse_blast_tsv.py](parse_blast_tsv.py) | Turns the tabular BLAST report into hit and HSP tables. |
-| Build the protein split | [dataset_prepseq.py](dataset_prepseq.py) | From the HuRI tables: fetches the sequences (via `download_gencode_fasta.py`), clusters them and searches them against the PDB with MMseqs2, and writes `sequences.zip`, `seqs-{train,val,test}.txt` and `meta.ini` for the [split](#train-validation-and-test-split). Slow steps are cached. |
+**1. Proteins and their split.** [dataset_prepseq.py](dataset_prepseq.py) takes the proteins of the HuRI search space
+from the supplementary tables, fetches their sequences from GENCODE (release 27, matching HuRI) and splits them as
+described [below](#train-validation-and-test-split), using MMseqs2 for the PDB search and the clustering. It writes
+`sequences.zip`, `seqs-train.txt`, `seqs-val.txt`, `seqs-test.txt` and `meta.ini`. The slow steps are cached, and
+existing outputs are never overwritten. It needs `mmseqs` on the `PATH`. From the repository root:
+
+```bash
+H=data/interactomes/HuRI
+pixi run -e tl-interactions-analysis tl-interactions/dataset_prepseq.py \
+    "$H/Supplementary Table 1.txt" "$H/Supplementary Table 2.txt" $H/HuRI.tsv data/datasets/huri-v2 \
+    --pdb-db data/mmseqs-db/PDB
+```
+
+**2. Pairs.** TODO: positive and negative protein pairs, and their split.
+
+**3. OpenFold3 input files.** TODO: one query per pair.
+
+**4. MSAs.** TODO: precomputed alignments for the proteins.
 
 Still to decide:
 
