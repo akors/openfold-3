@@ -8,6 +8,8 @@ pooled remaining clusters, so no cluster spans two splits. The dataset directory
 
 - ``sequences.zip``: one ``<protein_id>.fasta`` file per protein
 - ``seqs-train.txt``, ``seqs-val.txt``, ``seqs-test.txt``: protein IDs, one per line
+- ``proteins.tsv``: protein ID and gene ID of every protein
+- ``interactions.tsv``: a copy of the HuRI interactions (gene pairs)
 - ``meta.ini``: split and MMseqs2 parameters
 
 Slow steps (download, PDB database, PDB search, clustering) are cached and skipped on reruns.
@@ -365,7 +367,10 @@ def build_dataset(args):
     # Never overwrite a split: the user deletes the old one first
     split_paths = {name: args.dataset_dir / f"seqs-{name}.txt" for name in SPLITS}
     meta_path = args.dataset_dir / "meta.ini"
-    existing = [str(path) for path in [*split_paths.values(), meta_path] if path.exists()]
+    proteins_path = args.dataset_dir / "proteins.tsv"
+    interactions_path = args.dataset_dir / "interactions.tsv"
+    outputs = [*split_paths.values(), meta_path, proteins_path, interactions_path]
+    existing = [str(path) for path in outputs if path.exists()]
     if existing:
         raise DatasetError(f"Output files exist, delete them first: {' '.join(existing)}")
 
@@ -401,9 +406,13 @@ def build_dataset(args):
         path.write_text("".join(f"{protein}\n" for protein in sorted(split[name])))
     write_meta(meta_path, args)
 
-    # The per-protein downloads and the merged FASTA file are easy to recreate from sequences.zip
-    logger.info("Removing %s and %s", download_dir, fasta_path)
-    shutil.rmtree(download_dir, ignore_errors=True)
+    # The pairs step reads the interactions and the protein-to-gene mapping from the dataset
+    logger.info("Writing %s and %s", proteins_path, interactions_path)
+    protein_gene.sort_index().to_csv(proteins_path, sep="\t", header=["gene_id"], index_label="protein_id")
+    shutil.copyfile(args.interactions_tsv, interactions_path)
+
+    # The per-protein downloads stay as a cache for later steps; the merged FASTA file is only the mmseqs input
+    logger.info("Removing %s", fasta_path)
     fasta_path.unlink()
 
     print(f"Proteins with PDB hits: {len(hits):,}")
