@@ -9,7 +9,7 @@ See [README.md](README.md) for the plan behind these tasks.
   - [x] Cluster HuRI proteins and search them against the PDB with MMseqs2
   - [x] Decide the protein-level train/validation/test split (see README)
   - [x] Split the proteins: test from hit-free clusters, then train/validation from the pooled rest
-  - [ ] Build dimers (positives and negatives)
+  - [x] Build dimers (positives and negatives): `dataset_buildmultimers.py`, pure and mixed modes
 - [ ] **OpenFold3 setup:** inference with the default weights works and the outputs we need can be extracted
 - [ ] **Benchmarking:** OpenFold3 speed and memory on Intel + Hopper and Grace Hopper nodes
 - [ ] **Predictions:** run OpenFold3 on the full set of dimers and fill the feature cache
@@ -21,10 +21,20 @@ See [README.md](README.md) for the plan behind these tasks.
 
 ## Next tasks
 
-1. [ ] **Decide how to build dimers.**
-   - Pair-level split (the protein split is decided, see README)
-   - Negatives: sampling strategy and positive-to-negative ratio
-   - Length cap per pair
+1. [x] **Decide how to build dimers.** Done in `dataset_buildmultimers.py`:
+   - pure (C3) and mixed (C2) modes;
+   - uniform negatives, 3 per positive;
+   - a 2048-residue cap per multimer for now;
+   - genes with more than one protein, and homodimers, left out.
+
+   Follow-ups:
+   - [ ] Check the sizes of the pure val/test sets: pure test has 1,762 positives and pure val only 403, although
+     both splits hold 1,743 proteins.
+   - [ ] Compare the length distributions of positives and negatives (length as a shortcut).
+   - [ ] Add a degree-only baseline; consider degree-balanced negatives (see README, open questions).
+   - [ ] Decide whether to also exclude `HI-union` interactions from the negatives.
+   - [ ] Set the final length cap once benchmarking shows what fits.
+   - [ ] Build `huri-v1` once the pipeline is finished (`huri-v0` is for development).
 2. [ ] **Run a tiny set of predictions (fewer than 10 dimers)** to confirm that:
    - the default `openbind-2025-06-30-174k` weights load and run;
    - `write_latent_outputs` and `write_features` produce the keys and shapes we expect;

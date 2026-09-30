@@ -64,7 +64,8 @@ the first step starts from.
 **1. Proteins and their split.** [dataset_prepseq.py](dataset_prepseq.py) takes the proteins of the HuRI search space
 from the supplementary tables, fetches their sequences from GENCODE (release 27, matching HuRI) and splits them as
 described [below](#train-validation-and-test-split), using MMseqs2 for the PDB search and the clustering. It writes
-`sequences.zip`, `seqs-train.txt`, `seqs-val.txt`, `seqs-test.txt` and `meta.ini`. The slow steps are cached, and
+`sequences.zip`, `seqs-train.txt`, `seqs-val.txt`, `seqs-test.txt`, `meta.ini`, and for the next step
+`proteins.tsv` (protein to gene) and `interactions.tsv` (a copy of `HuRI.tsv`). The slow steps are cached, and
 existing outputs are never overwritten. It needs `mmseqs` on the `PATH`. From the repository root:
 
 ```bash
@@ -74,7 +75,20 @@ pixi run -e tl-interactions-analysis tl-interactions/dataset_prepseq.py \
     --pdb-db data/mmseqs-db/PDB
 ```
 
-**2. Pairs.** TODO: positive and negative protein pairs, and their split.
+**2. Multimers.** [dataset_buildmultimers.py](dataset_buildmultimers.py) builds labelled multimers (protein pairs)
+for each split. It writes them to `multimers/<name>/multimers-{train,val,test}.tsv` (columns `protein_a`,
+`protein_b`, `label`) with a `meta.ini`. Genes with more than one protein (13, whose screened ORF is ambiguous) and
+homodimers are left out. Positives are the HuRI interactions. Negatives are drawn uniformly from the allowed pairs that
+are not HuRI interactions, `--negatives-ratio` (default 3) per positive. Multimers whose summed length exceeds
+`--length-cutoff` (default 2048, OpenFold3's validation-set token cap) are dropped. `--mode` decides which proteins
+make up the validation and test multimers:
+
+- **pure:** both proteins from the split (C3 in Park & Marcotte, 2012);
+- **mixed:** one protein from train and the other from the split (C2). Train multimers are the same in both modes.
+
+```bash
+pixi run -e tl-interactions-analysis tl-interactions/dataset_buildmultimers.py data/datasets/huri-v2 --mode pure
+```
 
 **3. OpenFold3 input files.** TODO: one query per pair.
 
@@ -82,9 +96,8 @@ pixi run -e tl-interactions-analysis tl-interactions/dataset_prepseq.py \
 
 Still to decide:
 
-- how to split pairs (proteins are split as described [below](#train-validation-and-test-split));
-- the negative set, which is the next decision to make (see [Open questions](#open-questions-and-risks));
-- a length cap per pair, since very large proteins are expensive to predict and to cache.
+- the negative set, sampled uniformly for now (see [Open questions](#open-questions-and-risks));
+- the final length cap per pair, once benchmarking shows what fits.
 
 ### Train, validation and test split
 
@@ -215,13 +228,34 @@ own numbers.
 
 ## Open questions and risks
 
-- **Negatives and label noise.** *The next decision to make.* These are one question, not two. HuRI has no true
-  negatives: Y2H misses many real interactions, so "not detected" does not mean "does not bind", and any negative set
-  we build from it is noisy by construction. That makes the sampling strategy and the positive-to-negative ratio
-  decisions about what the model is able to learn, not just bookkeeping. Negatives drawn at random are separable by
-  protein degree and abundance alone, so a high AUROC could reflect "protein X has many partners" rather than anything
-  about interfaces; a protein-level split would limit this but not remove it. Park & Marcotte (2012) is the
-  reference for evaluating pair-input predictions under exactly this failure mode.
+- **No true negatives.** Y2H misses many real interactions, so "not detected" does not mean "does not bind". We
+  assume it does anyway: that is the data we have, and there is no ground truth to replace it. The labels are
+  therefore noisy by construction. How sensitive the screens are can be estimated from the controls in
+  Supplementary Table 5, where each version of the assay was run as a pairwise test on a positive reference set
+  (PRSv1, 84 well-documented binary interactions) and a random reference set (RRSv1, 90 random pairs), in both
+  orientations. A pair counts as detected if either orientation scored positive, and tests that are invalid or that
+  auto-activated are left out. The numbers are our own count:
+
+  | Assay version | PRSv1 detected | RRSv1 detected |
+  |---|---|---|
+  | 1 | 18 of 79 (23%) | 1 of 84 (1.2%) |
+  | 2 | 17 of 80 (21%) | 0 of 90 |
+  | 3 | 23 of 84 (27%) | 0 of 90 |
+  | Any of the three | 31 of 84 (37%) | 1 of 90 (1.1%) |
+
+  A retested pairwise test is the best case. The screens only sample the search space, so their sensitivity is
+  lower, and HuRI probably detects no more than about a third of the true binary interactions in its search space.
+  Our uniform negatives are nevertheless mostly correct, because true interactions are rare among random pairs.
+  Assuming that 37% sensitivity and ignoring false positives, HuRI's 52,548 interactions stand for at least
+  ~140,000 true ones. That leaves ≥ ~90,000 undetected among the ~1.5 × 10⁸ gene pairs of the search space, so about
+  0.06% of random negatives. This is a rough lower bound, and it is not evenly spread: missed interactions pile up
+  on proteins that Y2H handles badly.
+- **The protein-degree shortcut.** Some proteins have far more HuRI partners than others, and uniformly sampled
+  negatives rarely contain them. Degree and abundance alone therefore separate positives from negatives, so a high
+  AUROC could reflect "protein X has many partners" rather than anything about interfaces. The protein-level split
+  limits this but does not remove it. Park & Marcotte (2012) is the reference for evaluating pair-input predictions
+  under exactly this failure mode. Remedies still to weigh: a degree-only baseline next to the model, and
+  degree-balanced negatives.
 - **A PDB-derived control set.** A second dataset built from PDB complexes, with positives taken from chains that are
   in contact and artificial negatives from chain pairs that are not. Its positives have experimental structures and
   its negatives are cleaner than anything HuRI can offer, which makes it a positive control: if the head cannot
