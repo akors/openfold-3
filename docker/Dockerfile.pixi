@@ -11,6 +11,7 @@
 # Example:
 #   docker build -f docker/Dockerfile.pixi --target test -t openfold3:pixi-test .
 #   docker build -f docker/Dockerfile.pixi --build-arg PIXI_ENV=openfold3-cuda13 --target test -t openfold3:pixi-test-cuda13 .
+#   docker build -f docker/Dockerfile.pixi --build-arg PIXI_ENV=openfold3-msa --target msa -t openfold3:msa .
 
 ARG BASE_IMAGE=ubuntu:22.04
 
@@ -49,6 +50,14 @@ RUN case "${PIXI_ENV}" in \
         *cuda13*) export CONDA_OVERRIDE_CUDA=13.0 ;; \
     esac && \
     pixi install --frozen -e ${PIXI_ENV}
+
+# === MSA stage: OpenFold3-style MSA generation (build with PIXI_ENV=openfold3-msa) ===
+# Placed before devel so that --target msa never builds the devel stage.
+FROM ${BASE_IMAGE} AS msa
+ARG PIXI_ENV=openfold3-msa
+COPY --from=builder /opt/pixi-project/.pixi/envs/${PIXI_ENV} /opt/pixi-project/.pixi/envs/${PIXI_ENV}
+COPY scripts/snakemake_msa /opt/snakemake_msa
+ENV PATH=/opt/pixi-project/.pixi/envs/${PIXI_ENV}/bin:${PATH}
 
 # === Devel stage: lean runtime image with pixi activation ===
 FROM ${BASE_IMAGE} AS devel
