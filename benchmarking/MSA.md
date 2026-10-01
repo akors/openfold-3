@@ -83,3 +83,94 @@ Memory:
 - **Extrapolation to the full dataset.** huri-v1 has 17,421 proteins. At 2.63 core-h per protein that is
   **~46k core-h, about 4.6 months of the CPU allocation**. This assumes similar lengths and these settings.
 - **Output size.** The MSAs took 14 GB, about 146 MB per protein, which would be ~2.5 TB for all of huri-v1.
+
+## Berzelius
+
+Job 17684806, 2026-10-01. Raw records are in `data/benchmarks/msa-huri-v1-mixed50.berzelius/` (not in git):
+- `msa-huri-v1-mixed50.sbatch`: the job script
+- `benchmarks/`: one record per alignment
+- `run-17684806/`: metadata, phase times (database copies only, see below), and cgroup usage sampled every 30 s
+- `slurm-17684806.out`: the job's Slurm log
+
+**258 of the 288 alignments finished.** The repository was updated (`git pull`) at 20:04 while the job ran, which
+replaced `MSA_Snakefile_benchmark`. Snakemake reads the Snakefile again for every alignment it starts, so the 30
+alignments started in the next 28 s failed at once with "Snakefile not found" (18 mgnify, 7 uniref90, 5 uniprot).
+Alignments started later ran normally. The job ended as FAILED after the rest were done, so `phases.tsv` has no row for
+the alignments. The per-alignment numbers below come from the 258 records; the whole-job time for all 288 is estimated
+from them.
+
+### Hardware and setup
+
+| | |
+|---|---|
+| Node | `node226`, `berzelius-cpu` partition, x86_64 |
+| CPU | 2× AMD EPYC 9534 (Zen 4), 64 cores each, 128 cores, SMT 2 (256 threads), 4 NUMA nodes |
+| RAM | 1.1 TB per node |
+| Local disk | 6.4 TB NVMe per node (`/scratch/local`), no per-job quota |
+| Allocation | 128 cores (the whole node), 994 GB RAM (7.76 GB/core default) |
+| Software | Apptainer image `openfold3-msa_v0.5.0-amd64.sif`, Snakemake 9.21.0, HMMER 3.4; openfold-3 commit `127f7a67` |
+| Databases | uniref90 (90.6 GB), uniprot (120.1 GB), mgnify (138.3 GB), copied to local NVMe before the alignments; MSAs were written to project storage |
+| Parallelism | 8 jackhmmer threads per alignment, 16 alignments at a time (128 cores); 16 slots were busy from 18:11 to ~20:04 (job minutes 5–118), then the remaining alignments drained by 20:31 (minute ~145) |
+
+### Runtimes
+
+| Phase | Wall time |
+|---|---|
+| Copy databases to local NVMe (349 GB, ~1.2 GB/s) | 284 s: uniref90 71 s, uniprot 97 s, mgnify 116 s |
+| 258 of 288 alignments | 8,390 s (2 h 20 min), from the Snakemake log |
+| Whole job, as run | 8,710 s (2 h 25 min 10 s) |
+| **Whole job, estimated for all 288** | **~9,500 s (~2 h 38 min)** |
+
+The estimate adds the 30 missing alignments at the per-database mean times below, spread over the 16 slots (~1,000 s).
+
+Per alignment, measured with 8 threads while 15 other alignments ran on the same node:
+
+| Database | n | Mean | Median | Min | Max | CPU time / wall time |
+|---|---|---|---|---|---|---|
+| uniref90 | 89 | 366 s | 321 s | 266 s | 1,114 s | 4.5 of 8 |
+| uniprot | 91 | 480 s | 427 s | 361 s | 1,382 s | 4.2 of 8 |
+| mgnify | 78 | 601 s | 592 s | 501 s | 996 s | 3.9 of 8 |
+
+Wall time grows with sequence length: Pearson r between length and time is 0.54 for uniref90, 0.54 for uniprot and
+0.55 for mgnify. Summed over the three databases, the slowest complete protein (1141 residues) took 3,111 s.
+
+Per protein, summing the three searches (the 71 proteins with all three records):
+- Wall time: mean 1,466 s, median 1,337 s, range 1,152–3,111 s; about 3.4 s per residue.
+- CPU time: mean 5,999 s (1.67 core-h).
+
+Memory:
+- Most alignments are small: median peak memory per alignment is 0.3–0.5 GB.
+- The largest were 38 GB (uniprot) and 24 GB (uniref90), both for long proteins.
+- Peak memory over the whole job was 47.8 GB (`seff`).
+- The job's memory counter peaked at ~720 GB of the 994 GB limit. That is page cache from the copied databases
+  (349 GB), which fit in the limit.
+
+CPU use: while all 16 slots were busy (end of the database copy to 20:03), the job used on average 66 of its 128 cores.
+Over the whole job, CPU efficiency was 47 % (`seff`).
+
+**Average total time per sequence:**
+- **1,447 s (24.1 min)** of wall time for one protein's three searches: the sum of the three per-database means (8
+  threads per search, 16 searches at a time on the node). The mean over the 71 complete proteins is 1,466 s.
+- In throughput terms, the estimated whole job takes **~99 s of full-node time per sequence (~9,500 s / 96)**, which
+  is **~3.5 core-h per sequence**.
+
+### Slurm allocation usage
+
+| | |
+|---|---|
+| Account | `berzelius-2026-136` |
+| Charged | 128 cores × 2 h 25 min 10 s = **309.7 core-h = 19.4 GPU-h** (16 cores = 1 GPU-h; billing = 128 per hour). This is 0.11 % of the group's monthly 18,000 GPU-h. |
+| Estimated for all 288 | ~338 core-h = ~21 GPU-h |
+| Actually used | 146 core-h of CPU time (`seff`: 6-01:54:19), so CPU efficiency was 47 % |
+| Per sequence | ~3.5 core-h (~0.22 GPU-h) charged for all 288, 1.67 core-h used |
+
+### Notes
+
+- **Threads are underused.** jackhmmer averaged only ~4.2 of its 8 threads.
+- **Copying the databases** took ~3 % of the job's time. Reading the databases straight from project storage was not
+  measured.
+- **Extrapolation to the full dataset.** huri-v1 has 17,421 proteins. At ~3.5 core-h per protein that is
+  **~61k core-h, or ~3,800 GPU-h, about 21 % of the group's monthly allocation**. This assumes similar lengths and these
+  settings.
+- **Output size.** The 258 MSAs took 12 GB, about 140 MB per protein for all three, which would be ~2.4 TB for all of
+  huri-v1.
