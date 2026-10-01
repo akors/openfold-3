@@ -74,14 +74,57 @@ Memory:
 | Actually used | 167.4 core-h of CPU time, so CPU efficiency was 66 % (`seff`) |
 | Per sequence | 2.63 core-h charged, 1.74 core-h used |
 
+### Thread layout test: 32 × 4
+
+Job 3248592, 2026-10-01, node `n368` (same hardware). Raw records are in
+`data/benchmarks/msa-huri-v1-mixed50train-32x4.arrhenius/`, together with the job script.
+
+The run used **4 threads per alignment, 32 alignments at a time**, on the same 128 cores, with databases copied to local
+disk as before. The input was 56 proteins, the `mixed50/train` split, with mean length 459. All 56 were in the run
+above, so the 168 alignments compare one to one.
+
+| | 16 × 8 (job 3237961) | 32 × 4 (job 3248592) |
+|---|---|---|
+| Proteins | 96 | 56 |
+| Copy databases | 150 s | 142 s |
+| Alignments | 6,954 s | 3,896 s |
+| Whole job | 7,113 s | 4,047 s (1 h 07 min) |
+| Charged | 252.9 core-h | 143.9 core-h |
+| CPU efficiency (`seff`) | 66 % | 75 % |
+| Charged per sequence | 2.63 core-h | 2.57 core-h |
+| Half-node time per sequence | 74 s | 72 s |
+| Mean wall time per sequence (3 searches) | 1,069 s | 1,779 s |
+| Peak memory (`seff`) | 44.6 GB | 44.6 GB |
+
+Per alignment, for the same 56 proteins:
+- **Threads are almost fully used.** jackhmmer kept 3.7–3.8 of its 4 threads busy, against 5.5–6.0 of 8.
+- **Each search is slower but cheaper.** With half the threads, a search takes 1.67× as long. It occupies 17 % fewer
+  core-seconds, though: 7,116 per protein against 8,529. Total CPU time is 8–10 % higher, probably because 32 searches
+  compete for memory bandwidth and cache.
+
+**Whole job.** The node was busy while all 32 slots were full: 121 of 128 cores on average for the first ~51 minutes of
+alignments. In the last ~14 minutes only 23 cores were busy on average, because a few long searches ran on alone at 4
+threads each. The longest search took 2,247 s (uniprot), and the slowest protein took 5,703 s over its three searches.
+With only 56 proteins, that tail and the database copy take up a large share of the job. As a result the measured gain
+per sequence is only 2 %.
+
+**In production,** with thousands of proteins per job, the tail and the database copy shrink to almost nothing. The
+cost would then approach the core-seconds per protein, giving **an estimated ~2.0 core-h per sequence with 32 × 4,
+against ~2.4 with 16 × 8 (about −17 %)**. This is an estimate and hasn't been measured.
+
+**Average total time per sequence (32 × 4):**
+- **1,779 s (29.7 min)** of wall time for one protein's three searches.
+- In throughput terms, **72 s of half-node time per sequence (4,047 s / 56)**, which is **2.57 core-h**.
+
 ### Notes
 
-- **Threads are underused.** jackhmmer averaged only ~5.7 of its 8 threads. Running more alignments with fewer threads
-  each (for example 32 × 4) should give better throughput on the same allocation. This is untested.
+- **Use fewer threads per alignment.** At 8 threads, jackhmmer kept only ~5.7 busy. At 4 threads it keeps ~3.8 busy and
+  needs ~17 % fewer core-hours per protein; see the thread layout test. Two threads per alignment (64 × 2) is untested.
 - **Copying the databases is cheap.** It took 2 % of the job's time. Whether it is faster than reading the databases
   straight from project storage was not measured.
 - **Extrapolation to the full dataset.** huri-v1 has 17,421 proteins. At 2.63 core-h per protein that is
-  **~46k core-h, about 4.6 months of the CPU allocation**. This assumes similar lengths and these settings.
+  **~46k core-h, about 4.6 months of the CPU allocation**. With 32 × 4 in large jobs, the estimate drops to ~35k core-h
+  (~2.0 core-h per protein). Both assume similar protein lengths.
 - **Output size.** The MSAs took 14 GB, about 146 MB per protein, which would be ~2.5 TB for all of huri-v1.
 
 ## Berzelius
