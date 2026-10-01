@@ -86,6 +86,9 @@ make up the validation and test multimers:
 - **pure:** both proteins from the split (C3 in Park & Marcotte, 2012);
 - **mixed:** one protein from train and the other from the split (C2). Train multimers are the same in both modes.
 
+For smaller sets, `--splits` builds only some splits and `--total N` keeps at most `N` multimers over them. All splits
+are scaled by the same fraction, with at least one positive each.
+
 ```bash
 pixi run -e tl-interactions-analysis tl-interactions/dataset_buildmultimers.py data/datasets/huri-v2 --mode pure
 ```
