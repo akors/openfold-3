@@ -107,6 +107,13 @@ pixi run -e tl-interactions-analysis tl-interactions/prepjob_msa.py data/dataset
 snakemake -s scripts/snakemake_msa/MSA_Snakefile --configfile jobs/msa-pure.json --cores 32 --nolock --keep-going
 ```
 
+**Copying a dataset to a cluster.** The `cache` directories are left out, and `HOST:REPO` is the repository on the
+cluster. Without a trailing slash on the source, rsync copies the dataset directory itself into `data/datasets/`.
+
+```bash
+rsync -avP --exclude=cache/ data/datasets/huri-v2 HOST:REPO/data/datasets/
+```
+
 Still to decide:
 
 - the negative set, sampled uniformly for now (see [Open questions](#open-questions-and-risks));
