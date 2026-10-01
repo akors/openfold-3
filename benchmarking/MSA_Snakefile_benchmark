@@ -1,0 +1,12 @@
+# OpenFold3's MSA workflow with a benchmark per alignment (wall time, CPU time, max RSS, I/O), written to
+# {benchmark_directory}/{seqid}/{db}.{ext}.tsv. Run it like MSA_Snakefile, with the extra config key
+# benchmark_directory (default: benchmarks, relative to Snakemake's working directory).
+
+module msa:
+    snakefile: "../scripts/snakemake_msa/MSA_Snakefile"
+    config: config
+
+use rule * from msa
+
+use rule run_alignment from msa with:
+    benchmark: f"{config.get('benchmark_directory', 'benchmarks')}/{{seqid}}/{{db}}.{{ext}}.tsv"
