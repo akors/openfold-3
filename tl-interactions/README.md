@@ -95,7 +95,17 @@ pixi run -e tl-interactions-analysis tl-interactions/dataset_buildmultimers.py d
 
 **3. OpenFold3 input files.** TODO: one query per pair.
 
-**4. MSAs.** TODO: precomputed alignments for the proteins.
+**4. MSAs.** [prepjob_msa.py](prepjob_msa.py) prepares a job for OpenFold3's Snakemake MSA workflow
+([MSA_Snakefile](../scripts/snakemake_msa/MSA_Snakefile)): `JOB.fasta` with the proteins of the selected multimers
+(`--multimers NAME` or `NAME/SPLIT`, all by default) and the config `JOB.json`. Config defaults follow OpenFold3's
+protein example and can be overridden with `--set KEY=VALUE` (VALUE parsed as JSON if possible). Paths are written as
+given, so relative paths are relative to where Snakemake runs.
+
+```bash
+pixi run -e tl-interactions-analysis tl-interactions/prepjob_msa.py data/datasets/huri-v2 jobs/msa-pure \
+    alignments/huri-v2 --database-path /path/to/databases --multimers pure --set jackhmmer_threads=8
+snakemake -s scripts/snakemake_msa/MSA_Snakefile --configfile jobs/msa-pure.json --cores 32 --nolock --keep-going
+```
 
 Still to decide:
 
