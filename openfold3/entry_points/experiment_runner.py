@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import contextlib
+import importlib
 import json
 import logging
 import os
@@ -279,6 +280,12 @@ class ExperimentRunner(ABC):
                     stacks=self.memory_snapshot.stacks,
                 )
             )
+
+        # User-defined callbacks from the runner yaml
+        for spec in self.experiment_config.extra_callbacks:
+            module_name, _, class_name = spec.target.rpartition(".")
+            callback_class = getattr(importlib.import_module(module_name), class_name)
+            _callbacks.append(callback_class(**spec.kwargs))
 
         return _callbacks
 

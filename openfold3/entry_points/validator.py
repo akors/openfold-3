@@ -238,6 +238,18 @@ class MemorySnapshotConfig(BaseModel):
         return self
 
 
+class CallbackSpec(BaseModel):
+    """A Lightning callback to add to the trainer, e.g. to write custom outputs.
+
+    `target` is the import path of the callback class ("package.module.Class"),
+    `kwargs` are passed to its constructor.
+    """
+
+    model_config = PydanticConfigDict(extra="forbid")
+    target: str
+    kwargs: dict[str, Any] = {}
+
+
 class TrainingExperimentSettings(ExperimentSettings):
     """General settings specific for training experiments"""
 
@@ -342,6 +354,7 @@ class ExperimentConfig(BaseModel):
     user_default_runner_yaml_path: Path | None = None
     memory_snapshot: MemorySnapshotConfig = MemorySnapshotConfig()
     profiler: ProfilerConfig = ProfilerConfig()
+    extra_callbacks: list[CallbackSpec] = []
 
 
 class TrainingExperimentConfig(ExperimentConfig):
